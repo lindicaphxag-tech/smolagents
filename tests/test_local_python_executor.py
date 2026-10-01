@@ -378,6 +378,17 @@ for result in search_results:
         assert result == 9
         self.assertDictEqualNoPrint(state, {"x": 3, "y": 6, "_operations_count": {"counter": 4}})
 
+    def test_evaluate_matmul(self):
+        state = {"x": np.eye(2), "y": np.ones((2, 2))}
+        result, _ = evaluate_python_code("x @ y", {}, state=state)
+        np.testing.assert_array_equal(result, np.ones((2, 2)))
+
+    def test_evaluate_matmul_augassign(self):
+        state = {"x": np.eye(2), "y": np.ones((2, 2))}
+        result, _ = evaluate_python_code("x @= y", {}, state=state)
+        np.testing.assert_array_equal(result, np.ones((2, 2)))
+        np.testing.assert_array_equal(state["x"], np.ones((2, 2)))
+
     def test_recursive_function(self):
         code = """
 def recur_fibo(n):
