@@ -34,26 +34,29 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          file=Path('src/smolagents/local_python_executor.py')
+          file=Path("src/smolagents/local_python_executor.py")
           s=file.read_text()
-          old="""        # CPython truth-tests only intermediate comparison results. The final
-                  # result is returned untouched, and each intermediate result is tested
-                  # exactly once before deciding whether to evaluate the next operand.
-                  if i < len(condition.ops) - 1 and not current_result:
-                      return current_result
-                  left = right
-              return current_result"""
-          new="""        if current_result is False:
-                      return False
-                  result = current_result if i == 0 else (result and current_result)
-                  left = right
-              return result"""
-          old=old.replace('                  ','    ');new=new.replace('                  ','    ')
-          assert s.count(old)==1,'upstream exact two-line witness changed'
-          s=s.replace(old,new)
-          anchor='    left = evaluate_ast(condition.left, state, static_tools, custom_tools, authorized_imports)'
-          assert s.count(anchor)==1
-          s=s.replace(anchor,'    result = True\n'+anchor)
+          current=(
+              "        # CPython truth-tests only intermediate comparison results. The final\n"
+              "        # result is returned untouched, and each intermediate result is tested\n"
+              "        # exactly once before deciding whether to evaluate the next operand.\n"
+              "        if i < len(condition.ops) - 1 and not current_result:\n"
+              "            return current_result\n"
+              "        left = right\n"
+              "    return current_result"
+          )
+          legacy=(
+              "        if current_result is False:\n"
+              "            return False\n"
+              "        result = current_result if i == 0 else (result and current_result)\n"
+              "        left = right\n"
+              "    return result"
+          )
+          assert s.count(current)==1, "reviewed comparator source changed"
+          s=s.replace(current,legacy)
+          anchor="    left = evaluate_ast(condition.left, state, static_tools, custom_tools, authorized_imports)"
+          assert s.count(anchor)==1, "reviewed comparator source changed"
+          s=s.replace(anchor, "    result = True\n"+anchor)
           file.write_text(s)
           PY
           if python -u ci/smolagents_chained_compare_cpython_parity.py; then
