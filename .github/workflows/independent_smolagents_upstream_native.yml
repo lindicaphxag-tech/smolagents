@@ -1,4 +1,5 @@
 name: Independent smolagents 2991 and 3000 native upstream acceptance
+# Official PRs remain unchanged; native tests are external author validation only.
 on:
   push:
     branches:
