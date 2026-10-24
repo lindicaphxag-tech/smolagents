@@ -1,0 +1,64 @@
+name: Chained comparison: native CPython parity and old-code RED
+on:
+  pull_request:
+    branches:
+      - fix/chained-comparison-false-like-short-circuit-2920
+  push:
+    branches:
+      - ci/pr3000-native-semantic-gate-20261024
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-cpython-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install actual smolagents package and targeted tests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest numpy pandas ruff
+      - name: Syntax and source style
+        run: |
+          python -m py_compile ci/smolagents_chained_compare_cpython_parity.py
+          ruff check src/smolagents/local_python_executor.py tests/test_local_python_executor.py
+      - name: Current production parser must match native CPython comparison evaluation
+        run: |
+          python -u ci/smolagents_chained_compare_cpython_parity.py
+          python -m pytest -q tests/test_local_python_executor.py -k 'chained_comparison or single_comparison'
+      - name: Exact previous implementation must fail the independent CPython witness
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          file=Path('src/smolagents/local_python_executor.py')
+          s=file.read_text()
+          old="""        # CPython truth-tests only intermediate comparison results. The final
+                  # result is returned untouched, and each intermediate result is tested
+                  # exactly once before deciding whether to evaluate the next operand.
+                  if i < len(condition.ops) - 1 and not current_result:
+                      return current_result
+                  left = right
+              return current_result"""
+          new="""        if current_result is False:
+                      return False
+                  result = current_result if i == 0 else (result and current_result)
+                  left = right
+              return result"""
+          old=old.replace('                  ','    ');new=new.replace('                  ','    ')
+          assert s.count(old)==1,'upstream exact two-line witness changed'
+          s=s.replace(old,new)
+          anchor='    left = evaluate_ast(condition.left, state, static_tools, custom_tools, authorized_imports)'
+          assert s.count(anchor)==1
+          s=s.replace(anchor,'    result = True\n'+anchor)
+          file.write_text(s)
+          PY
+          if python -u ci/smolagents_chained_compare_cpython_parity.py; then
+            echo 'ERROR: old interpreter unexpectedly passed CPython semantics'
+            exit 1
+          else
+            echo 'EXPECTED_RED: old interpreter violates CPython rich comparison truth testing'
+          fi
